@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Find My Cat</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        color: #1f2937;
+      }
+      .container {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        min-height: 100vh;
+      }
+      .panel {
+        padding: 16px;
+        border-right: 1px solid #e5e7eb;
+        overflow-y: auto;
+      }
+      #map {
+        height: 100vh;
+        width: 100%;
+      }
+      h1 {
+        margin-top: 0;
+      }
+      form {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+      input,
+      textarea,
+      select,
+      button {
+        font: inherit;
+        padding: 8px;
+      }
+      .hint {
+        font-size: 12px;
+        color: #6b7280;
+      }
+      .report {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 10px;
+        margin-bottom: 10px;
+      }
+      .report img {
+        width: 100%;
+        border-radius: 8px;
+        margin-top: 8px;
+      }
+      @media (max-width: 900px) {
+        .container {
+          grid-template-columns: 1fr;
+        }
+        #map {
+          height: 50vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <aside class="panel">
+        <h1>Find My Cat</h1>
+        <p class="hint">
+          Anonymous reports only. Saved location is intentionally blurred to protect privacy.
+        </p>
+
+        <form id="reportForm">
+          <select name="status" required>
+            <option value="lost">Lost</option>
+            <option value="found">Found</option>
+          </select>
+          <input
+            type="text"
+            name="contact_phone"
+            placeholder="Contact WhatsApp number (e.g. 9715xxxxxxx)"
+            required
+          />
+          <input type="text" name="title" placeholder="Short title" required />
+          <textarea name="description" rows="3" placeholder="Details"></textarea>
+          <input type="number" step="any" name="lat" placeholder="Latitude" required />
+          <input type="number" step="any" name="lng" placeholder="Longitude" required />
+          <input type="file" name="photo" accept="image/*" required />
+          <button type="submit">Submit report</button>
+        </form>
+
+        <div id="reports" class="hint">
+          Old reports are hidden here. Explore map pins to view details.
+        </div>
+      </aside>
+      <main id="map"></main>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script>
+      const map = L.map("map").setView([51.505, -0.09], 12);
+      const markers = L.layerGroup().addTo(map);
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap contributors",
+      }).addTo(map);
+
+      map.on("click", (e) => {
+        document.querySelector('input[name="lat"]').value = e.latlng.lat.toFixed(6);
+        document.querySelector('input[name="lng"]').value = e.latlng.lng.toFixed(6);
+      });
+
+      function renderReports(items) {
+        markers.clearLayers();
+
+        items.forEach((report) => {
+          const marker = L.marker([report.lat, report.lng]).addTo(markers);
+          const phone = String(report.contact_phone || "").replace(/[^\d]/g, "");
+          const contactMessage = `Hi, I found a cat and saw your report: ${report.title}`;
+          const waLink = phone
+            ? `https://wa.me/${phone}?text=${encodeURIComponent(contactMessage)}`
+            : "";
+          marker.bindPopup(
+            `
+            <strong>${report.status.toUpperCase()}</strong><br>
+            ${report.title}<br>
+            ${report.description || ""}<br>
+            ${report.photo_url ? `<img src="${report.photo_url}" alt="cat photo" style="width:180px;margin-top:8px;border-radius:8px;" />` : ""}
+            <br>
+            ${
+              waLink
+                ? `<a href="${waLink}" target="_blank" rel="noopener noreferrer">Message on WhatsApp</a>`
+                : "<span>No contact number</span>"
+            }
+            `
+          );
+        });
+      }
+
+      async function loadReports() {
+        const res = await fetch("/api/reports");
+        const data = await res.json();
+        renderReports(data.reports || []);
+      }
+
+      document.getElementById("reportForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const response = await fetch("/api/reports", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          alert(err.detail || "Failed to create report");
+          return;
+        }
+
+        e.target.reset();
+        await loadReports();
+      });
+
+      loadReports();
+    </script>
+  </body>
+  </html>
