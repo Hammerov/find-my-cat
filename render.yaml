@@ -4,6 +4,6 @@ services:
     env: python
     plan: free
     root: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: python app.py
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && python app.py
     autoDeploy: true
